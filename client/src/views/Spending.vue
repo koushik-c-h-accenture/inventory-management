@@ -199,7 +199,7 @@ export default {
     const selectedCostData = ref(null)
 
     // Use shared filters
-    const { selectedPeriod, getCurrentFilters } = useFilters()
+    const { selectedPeriod, selectedLocation, selectedCategory, getCurrentFilters } = useFilters()
 
     // Monthly spending chart always shows all months (not filtered)
     const monthlySpending = computed(() => {
@@ -262,16 +262,24 @@ export default {
       }
     })
 
-    // Filtered orders based on selected period
+    // Filtered orders based on selected period, warehouse, and category
     const filteredOrders = computed(() => {
-      if (selectedPeriod.value === 'all') {
-        return allOrders.value
-      }
-
-      // Filter orders by selected month
       return allOrders.value.filter(order => {
-        const orderMonth = new Date(order.order_date).toISOString().slice(0, 7)
-        return orderMonth === selectedPeriod.value
+        // Period filter
+        if (selectedPeriod.value !== 'all') {
+          const orderMonth = new Date(order.order_date).toISOString().slice(0, 7)
+          if (orderMonth !== selectedPeriod.value) return false
+        }
+        // Warehouse filter
+        if (selectedLocation.value !== 'all' && order.warehouse !== selectedLocation.value) return false
+        // Category filter — orders have items with categories
+        if (selectedCategory.value !== 'all') {
+          const hasCategory = order.items && order.items.some(item =>
+            item.category && item.category.toLowerCase() === selectedCategory.value.toLowerCase()
+          )
+          if (!hasCategory) return false
+        }
+        return true
       })
     })
 
@@ -369,11 +377,6 @@ export default {
         loading.value = false
       }
     }
-
-    // Watch for period filter changes
-    watch([selectedPeriod], () => {
-      // Data will automatically update via computed properties
-    })
 
     const formatCurrency = (value) => {
       return formatCurrencyUtil(value, currentCurrency.value)

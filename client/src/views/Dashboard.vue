@@ -314,6 +314,7 @@ export default {
   setup() {
     const { t, currentCurrency, translateProductName, translateWarehouse } = useI18n()
     const loading = ref(true)
+    const initialized = ref(false)
     const error = ref(null)
     const summary = ref({})
     const allOrders = ref([])
@@ -560,7 +561,7 @@ export default {
 
     const loadData = async () => {
       try {
-        loading.value = true
+        if (!initialized.value) loading.value = true
         const filters = getCurrentFilters()
 
         const [summaryData, ordersData, inventoryData, backlogData] = await Promise.all([
@@ -574,6 +575,7 @@ export default {
         allOrders.value = ordersData
         inventoryItems.value = inventoryData
         allBacklogItems.value = backlogData
+        initialized.value = true
       } catch (err) {
         error.value = 'Failed to load dashboard data: ' + err.message
       } finally {

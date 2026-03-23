@@ -27,6 +27,40 @@
         </div>
       </div>
 
+      <div v-if="submittedOrders.length > 0" class="card submitted-orders-card">
+        <div class="card-header">
+          <h3 class="card-title">Submitted Orders ({{ submittedOrders.length }})</h3>
+          <span class="submitted-badge">From Restocking Tab</span>
+        </div>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Order Number</th>
+                <th>Items</th>
+                <th>Warehouse</th>
+                <th>Order Date</th>
+                <th>Expected Delivery</th>
+                <th>Total Value</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="order in submittedOrders" :key="order.id">
+                <td><strong>{{ order.order_number }}</strong></td>
+                <td>{{ order.items.length }} item(s)</td>
+                <td>{{ order.warehouse }}</td>
+                <td>{{ formatDate(order.order_date) }}</td>
+                <td>{{ formatDate(order.expected_delivery) }}</td>
+                <td><strong>${{ order.total_value.toLocaleString() }}</strong></td>
+                <td><span class="badge info">Processing</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="lead-time-note">Lead time: 14 days from order date</p>
+      </div>
+
       <div class="card">
         <div class="card-header">
           <h3 class="card-title">{{ t('orders.allOrders') }} ({{ orders.length }})</h3>
@@ -93,8 +127,19 @@ export default {
       return currentCurrency.value === 'JPY' ? '¥' : '$'
     })
     const loading = ref(true)
+    const initialized = ref(false)
     const error = ref(null)
     const orders = ref([])
+    const submittedOrders = ref([])
+
+    const loadSubmittedOrders = async () => {
+      try {
+        submittedOrders.value = await api.getSubmittedOrders()
+      } catch (err) {
+        // Silently fail — submitted orders section is optional
+        console.error('Failed to load submitted orders:', err)
+      }
+    }
 
     // Use shared filters
     const {
@@ -107,7 +152,7 @@ export default {
 
     const loadOrders = async () => {
       try {
-        loading.value = true
+        if (!initialized.value) loading.value = true
         const filters = getCurrentFilters()
         const fetchedOrders = await api.getOrders(filters)
 
@@ -117,6 +162,7 @@ export default {
           const dateB = new Date(b.order_date)
           return dateA - dateB
         })
+        initialized.value = true
       } catch (err) {
         error.value = 'Failed to load orders: ' + err.message
       } finally {
@@ -153,13 +199,17 @@ export default {
       })
     }
 
-    onMounted(loadOrders)
+    onMounted(() => {
+      loadOrders()
+      loadSubmittedOrders()
+    })
 
     return {
       t,
       loading,
       error,
       orders,
+      submittedOrders,
       getOrdersByStatus,
       getOrderStatusClass,
       formatDate,
@@ -275,5 +325,25 @@ export default {
 .item-meta {
   font-size: 0.813rem;
   color: #64748b;
+}
+
+.submitted-orders-card {
+  border-left: 3px solid #2563eb;
+}
+
+.submitted-badge {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #1e40af;
+  background: #dbeafe;
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+}
+
+.lead-time-note {
+  font-size: 0.813rem;
+  color: #64748b;
+  padding: 0.75rem 0 0;
+  margin: 0;
 }
 </style>

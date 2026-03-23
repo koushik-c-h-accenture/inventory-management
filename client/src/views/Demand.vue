@@ -121,6 +121,7 @@ export default {
   setup() {
     const { t } = useI18n()
     const loading = ref(true)
+    const initialized = ref(false)
     const error = ref(null)
     const allForecasts = ref([])
     const inventoryItems = ref([])
@@ -141,7 +142,7 @@ export default {
 
     const loadForecasts = async () => {
       try {
-        loading.value = true
+        if (!initialized.value) loading.value = true
         const filters = getCurrentFilters()
 
         const [forecastsData, inventoryData] = await Promise.all([
@@ -154,6 +155,7 @@ export default {
 
         allForecasts.value = forecastsData
         inventoryItems.value = inventoryData
+        initialized.value = true
       } catch (err) {
         error.value = 'Failed to load demand forecasts: ' + err.message
       } finally {
