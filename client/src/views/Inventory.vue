@@ -103,6 +103,7 @@ export default {
     })
 
     const loading = ref(true)
+    const initialized = ref(false)
     const error = ref(null)
     const items = ref([])
     const searchQuery = ref('')
@@ -151,13 +152,14 @@ export default {
 
     const loadInventory = async () => {
       try {
-        loading.value = true
+        if (!initialized.value) loading.value = true
         const filters = getCurrentFilters()
         // Inventory doesn't support month/status filters, only warehouse and category
         items.value = await api.getInventory({
           warehouse: filters.warehouse,
           category: filters.category
         })
+        initialized.value = true
       } catch (err) {
         error.value = 'Failed to load inventory: ' + err.message
       } finally {

@@ -90,6 +90,7 @@ export default {
   name: 'Backlog',
   setup() {
     const loading = ref(true)
+    const initialized = ref(false)
     const error = ref(null)
     const allBacklogItems = ref([])
     const inventoryItems = ref([])
@@ -110,7 +111,7 @@ export default {
 
     const loadBacklog = async () => {
       try {
-        loading.value = true
+        if (!initialized.value) loading.value = true
         const filters = getCurrentFilters()
 
         const [backlogData, inventoryData] = await Promise.all([
@@ -123,6 +124,7 @@ export default {
 
         allBacklogItems.value = backlogData
         inventoryItems.value = inventoryData
+        initialized.value = true
       } catch (err) {
         error.value = 'Failed to load backlog: ' + err.message
       } finally {
