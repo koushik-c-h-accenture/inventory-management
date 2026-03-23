@@ -2,7 +2,11 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional
 from pydantic import BaseModel
+from datetime import datetime, timedelta
 from mock_data import inventory_items, orders, demand_forecasts, backlog_items, spending_summary, monthly_spending, category_spending, recent_transactions, purchase_orders
+
+# In-memory store for restocking orders submitted via the Restocking tab
+submitted_orders: List[dict] = []
 
 app = FastAPI(title="Factory Inventory Management System")
 
@@ -119,6 +123,25 @@ class CreatePurchaseOrderRequest(BaseModel):
     unit_cost: float
     expected_delivery_date: str
     notes: Optional[str] = None
+
+class CreateOrderRequest(BaseModel):
+    customer: str
+    items: List[dict]  # [{sku, name, quantity, unit_price}]
+    warehouse: str
+    category: str
+
+class RestockingRecommendation(BaseModel):
+    id: str
+    item_sku: str
+    item_name: str
+    current_demand: int
+    forecasted_demand: int
+    demand_gap: int
+    trend: str
+    unit_cost: float
+    estimated_cost: float
+    warehouse: Optional[str] = None
+    category: Optional[str] = None
 
 # API endpoints
 @app.get("/")
@@ -303,6 +326,79 @@ def get_monthly_trends():
     result = list(months.values())
     result.sort(key=lambda x: x['month'])
     return result
+
+@app.get("/api/restocking/recommendations", response_model=List[RestockingRecommendation])
+def get_restocking_recommendations(warehouse: Optional[str] = None):
+    """Get demand-based restocking recommendations enriched with unit costs from inventory."""
+    # Build SKU → inventory item lookup, optionally filtered by warehouse
+    inventory_lookup = {}
+    for item in inventory_items:
+        if warehouse and warehouse != 'all' and item.get('warehouse') != warehouse:
+            continue
+        sku = item.get('sku')
+        if sku and sku not in inventory_lookup:
+            inventory_lookup[sku] = item
+
+    recommendations = []
+    for forecast in demand_forecasts:
+        demand_gap = forecast['forecasted_demand'] - forecast['current_demand']
+        if demand_gap <= 0:
+            continue
+
+        inv = inventory_lookup.get(forecast['item_sku'])
+        if not inv:
+            continue
+
+        unit_cost = inv.get('unit_cost', 0.0)
+        recommendations.append({
+            'id': forecast['id'],
+            'item_sku': forecast['item_sku'],
+            'item_name': forecast['item_name'],
+            'current_demand': forecast['current_demand'],
+            'forecasted_demand': forecast['forecasted_demand'],
+            'demand_gap': demand_gap,
+            'trend': forecast['trend'],
+            'unit_cost': unit_cost,
+            'estimated_cost': round(demand_gap * unit_cost, 2),
+            'warehouse': inv.get('warehouse'),
+            'category': inv.get('category'),
+        })
+
+    recommendations.sort(key=lambda x: x['demand_gap'], reverse=True)
+    return recommendations
+
+
+@app.post("/api/orders", response_model=Order, status_code=201)
+def create_order(order_data: CreateOrderRequest):
+    """Create a new restocking order and store it in memory."""
+    now = datetime.now()
+    order_number = f"RST-{now.year}-{str(len(submitted_orders) + 1).zfill(4)}"
+    total_value = sum(
+        item.get('quantity', 0) * item.get('unit_price', 0)
+        for item in order_data.items
+    )
+    new_order = {
+        'id': f"rst-{len(submitted_orders) + 1}",
+        'order_number': order_number,
+        'customer': order_data.customer,
+        'items': order_data.items,
+        'status': 'Processing',
+        'order_date': now.isoformat(),
+        'expected_delivery': (now + timedelta(days=14)).isoformat(),
+        'total_value': round(total_value, 2),
+        'actual_delivery': None,
+        'warehouse': order_data.warehouse,
+        'category': order_data.category,
+    }
+    submitted_orders.append(new_order)
+    return new_order
+
+
+@app.get("/api/submitted-orders", response_model=List[Order])
+def get_submitted_orders():
+    """Get all orders submitted via the Restocking tab."""
+    return submitted_orders
+
 
 if __name__ == "__main__":
     import uvicorn
